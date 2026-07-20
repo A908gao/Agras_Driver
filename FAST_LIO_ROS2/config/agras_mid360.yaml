@@ -12,21 +12,21 @@
         common:
             lid_topic:  "/livox/lidar"
             imu_topic:  "/livox/imu"
-            time_sync_en: true          # 让FAST-LIO自动估计LiDAR-IMU时间偏移
+            time_sync_en: false         # Agras: IMU和LiDAR同一时钟源
             time_offset_lidar_to_imu: 0.0
 
         preprocess:
-            lidar_type: 1                # 1 for Livox serials LiDAR (Agras is a MID360 variant)
+            lidar_type: 1                # 1 for Livox serials LiDAR
             scan_line:  4
             blind: 0.3
             timestamp_unit: 3
-            scan_rate: 10                # Match publish_freq in launch (10Hz)
+            scan_rate: 10                # Match publish_freq (10Hz)
 
         mapping:
-            acc_cov: 0.5                 # Agras IMU噪声更大，提高协方差
-            gyr_cov: 0.5                 # 原值0.1对Agras太紧，导致漂移
+            acc_cov: 0.1
+            gyr_cov: 0.1
             b_acc_cov: 0.0001
-            b_gyr_cov: 0.0001
+            b_gyr_cov: 0.001          # 提高以更快估计陀螺偏置
             fov_degree:    360.0
             det_range:     50.0
             extrinsic_est_en:  false

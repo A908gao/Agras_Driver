@@ -67,4 +67,11 @@ def generate_launch_description():
     ld.add_action(fast_lio_node)
     ld.add_action(rviz_node)
 
+    # Static TF for RViz display
+    ld.add_action(Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        arguments=['0', '0', '0', '0', '0', '0', 'map', 'livox_frame']
+    ))
+
     return ld
