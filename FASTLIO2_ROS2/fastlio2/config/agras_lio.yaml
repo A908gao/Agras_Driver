@@ -1,0 +1,38 @@
+# ============================================================
+# FASTLIO2 Agras MID360 配置
+# ============================================================
+imu_topic: /livox/imu
+lidar_topic: /livox/lidar
+body_frame: body
+world_frame: lidar
+print_time_cost: false
+
+# 点云预处理
+lidar_filter_num: 4            # 4条激光线
+lidar_min_range: 0.3           # 盲区0.3m (Agras可测到0.4m)
+lidar_max_range: 50.0          # 匹配驱动>50m过滤
+scan_resolution: 0.15
+map_resolution: 0.3
+
+cube_len: 300
+det_range: 50                  # 特征搜索范围
+move_thresh: 1.5
+
+# IMU噪声参数 (Agras IMU噪声约为标准MID360的5倍)
+na: 0.5                        # 加速度计噪声密度
+ng: 0.5                        # 陀螺仪噪声密度
+nba: 0.0001                    # 加速度计偏置噪声
+nbg: 0.0001                    # 陀螺仪偏置噪声
+
+imu_init_num: 20               # 初始化时IMU样本数
+near_search_num: 5
+ieskf_max_iter: 5
+
+gravity_align: true            # 静止初始化时自动对齐重力
+esti_il: false                 # 不估计外参
+
+# LiDAR-IMU外参 (MID360标准值)
+r_il: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+t_il: [-0.011, -0.02329, 0.04412]
+
+lidar_cov_inv: 1000.0
