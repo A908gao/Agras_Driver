@@ -16,6 +16,12 @@ def generate_launch_description():
 
     return launch.LaunchDescription(
         [
+            # Bridge livox_frame → lidar (both refer to the same physical LiDAR frame)
+            launch_ros.actions.Node(
+                package="tf2_ros",
+                executable="static_transform_publisher",
+                arguments=["0", "0", "0", "0", "0", "0", "lidar", "livox_frame"]
+            ),
             launch_ros.actions.Node(
                 package="fastlio2",
                 executable="lio_node",
