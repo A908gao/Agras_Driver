@@ -12,9 +12,8 @@
         common:
             lid_topic:  "/livox/lidar"
             imu_topic:  "/livox/imu"
-            time_sync_en: false         # ONLY turn on when external time synchronization is really not possible
-            time_offset_lidar_to_imu: 0.0 # Time offset between lidar and IMU calibrated by other algorithms, e.g. LI-Init (can be found in README).
-                                        # This param will take effect no matter what time_sync_en is. So if the time offset is not known exactly, please set as 0.0
+            time_sync_en: true          # 让FAST-LIO自动估计LiDAR-IMU时间偏移
+            time_offset_lidar_to_imu: 0.0
 
         preprocess:
             lidar_type: 1                # 1 for Livox serials LiDAR (Agras is a MID360 variant)
@@ -24,17 +23,17 @@
             scan_rate: 10                # Match publish_freq in launch (10Hz)
 
         mapping:
-            acc_cov: 0.1
-            gyr_cov: 0.1
+            acc_cov: 0.5                 # Agras IMU噪声更大，提高协方差
+            gyr_cov: 0.5                 # 原值0.1对Agras太紧，导致漂移
             b_acc_cov: 0.0001
             b_gyr_cov: 0.0001
-            fov_degree:    360.0         # 垂直安装时360°环扫前方，机臂遮挡通过blind+点云滤波处理
-            det_range:     50.0          # Agras驱动端已做50m滤波，匹配设置
-            extrinsic_est_en:  false     # 垂直安装时建议先关闭在线估计，用固定外参
+            fov_degree:    360.0
+            det_range:     50.0
+            extrinsic_est_en:  false
             extrinsic_T: [ -0.011, -0.02329, 0.04412 ]
-            extrinsic_R: [ 1., 0., 0.,   # LiDAR-IMU外参不变！
-                            0., 1., 0.,   # 注意：整体垂直安装≠外参变化
-                            0., 0., 1.]   # 重力方向由FAST-LIO2静止初始化自动对齐
+            extrinsic_R: [ 1., 0., 0.,
+                            0., 1., 0.,
+                            0., 0., 1.]
 
         publish:
             path_en: true                # true: publish Path
