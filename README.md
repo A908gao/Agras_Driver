@@ -93,10 +93,12 @@ Agras 固件在无激光回波时生成距离恰好 **200m**、反射率为 **0*
 
 | 文件 | 改动 |
 |------|------|
-| `config/agras_mid360.yaml` | **新增** Agras 参数：`lidar_type: 1`、`scan_rate: 10`、`det_range: 50m`、`blind: 0.3m` |
+| `config/agras_mid360.yaml` | **新增** Agras 参数：`lidar_type: 1`、`scan_rate: 10`、`det_range: 50m`、`blind: 0.3m`、**`b_gyr_cov: 0.001`（适配陀螺偏置）** |
 | `config/mid360.yaml` | 保留原版配置 |
+| `src/laserMapping.cpp` | **8 处 `camera_init` → `livox_frame`**，修复 TF 帧名不匹配 |
 | `src/preprocess.cpp` | 适配 Agras 点云格式和 timestamp 处理 |
-| `rviz/fastlio.rviz` | 调整可视化参数 |
+| `rviz/fastlio.rviz` | 修复 Fixed Frame `camera_init` → `livox_frame` |
+| `launch/mapping.launch.py` | 添加 `map → livox_frame` 静态 TF 发布 |
 
 ---
 
@@ -116,17 +118,25 @@ Agras 固件在无激光回波时生成距离恰好 **200m**、反射率为 **0*
 
 ```bash
 # 编译 SDK
-cd Livox-SDK2/build && cmake .. && make -j
+cd Livox-SDK2 && mkdir -p build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+make -j
 sudo cp sdk_core/liblivox_lidar_sdk_static.a sdk_core/liblivox_lidar_sdk_shared.so /usr/local/lib/
 
-# 编译驱动（在工作空间中）
-source /opt/ros/humble/setup.bash
+# 编译驱动 + FAST-LIO
+cd ../.. && source /opt/ros/humble/setup.bash
 colcon build --packages-select livox_ros_driver2 fast_lio --cmake-args -DCMAKE_BUILD_TYPE=Release
 source install/setup.bash
 
-# 运行驱动
+# 一键启动（自动开两个终端）
+./start_agras.sh
+
+# 或手动分别启动：
+# 终端1 - 驱动
 ros2 launch livox_ros_driver2 msg_AGRAS_MID360_launch.py
 
-# 运行 FAST-LIO
+# 终端2 - FAST-LIO
 ros2 launch fast_lio mapping.launch.py config_file:=agras_mid360.yaml
 ```
+
+> **启动后务必静止 3 秒**，让 FAST-LIO 完成 IMU 初始化和陀螺偏置估计。
