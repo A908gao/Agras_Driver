@@ -490,11 +490,9 @@ void Lddc::InitImuMsg(const ImuData& imu_data, ImuMsg& imu_msg, uint64_t& timest
   imu_msg.angular_velocity.x = imu_data.gyro_x;
   imu_msg.angular_velocity.y = imu_data.gyro_y;
   imu_msg.angular_velocity.z = imu_data.gyro_z;
-  // Livox IMU reports acceleration in G (multiples of 9.8 m/s²).
-  // ROS sensor_msgs/Imu requires linear_acceleration in m/s², so convert here.
-  imu_msg.linear_acceleration.x = imu_data.acc_x * 9.8;
-  imu_msg.linear_acceleration.y = imu_data.acc_y * 9.8;
-  imu_msg.linear_acceleration.z = imu_data.acc_z * 9.8;
+  imu_msg.linear_acceleration.x = imu_data.acc_x;
+  imu_msg.linear_acceleration.y = imu_data.acc_y;
+  imu_msg.linear_acceleration.z = imu_data.acc_z;
 }
 
 void Lddc::PublishImuData(LidarImuDataQueue& imu_data_queue, const uint8_t index) {
