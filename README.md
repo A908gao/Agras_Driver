@@ -1,6 +1,10 @@
 # Agras MID360 Driver
 
-基于 Livox MID360 激光雷达定制的 Agras 农业无人机驱动方案，包含驱动层修改、FAST-LIO 适配、SDK 层优化。
+基于 Livox MID360 激光雷达 + ADIS16500 外部 IMU 的高精度 SLAM 方案。
+
+**系统架构**: `L431_ADI (MCU固件)` → ttyACM0 → `ext_imu_bridge (本驱动)` → `/livox/imu` → `FAST-LIO`
+
+> **配套 MCU 固件**: [L431_ADI](https://gitcode.com/gcw_4Fu256zc/L431_ADI/tree/v1.0) — STM32L431RCTx + FreeRTOS，驱动 ADIS16500/16470/16505 IMU，1000Hz SPI 采集 + 二进制协议输出，支持陀螺/加速度计自动校准。
 
 ---
 
@@ -116,7 +120,8 @@ Agras 固件在无激光回波时生成距离恰好 **200m**、反射率为 **0*
 
 ### 4. 外部 IMU 桥接器 (L431_ADI) — **新增**
 
-支持从串口 `/dev/ttyACM0` 读取 ADIS16500/ADIS16470 外部高精度 IMU，
+对接 [L431_ADI](https://gitcode.com/gcw_4Fu256zc/L431_ADI/tree/v1.0) MCU 固件，
+从串口 `/dev/ttyACM0` 读取 ADIS16500/ADIS16470 外部高精度 IMU，
 替代 Livox 内置 IMU，提升 SLAM 精度。
 
 | 文件 | 说明 |
