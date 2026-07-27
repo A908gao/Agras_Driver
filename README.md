@@ -114,6 +114,66 @@ Agras 固件在无激光回波时生成距离恰好 **200m**、反射率为 **0*
 
 ---
 
+### 4. 外部 IMU 桥接器 (L431_ADI) — **新增**
+
+支持从串口 `/dev/ttyACM0` 读取 ADIS16500/ADIS16470 外部高精度 IMU，
+替代 Livox 内置 IMU，提升 SLAM 精度。
+
+| 文件 | 说明 |
+|------|------|
+| `livox_ros_driver2/src/ext_imu_bridge.h` | **新增** 桥接器类声明，单位枚举 (`rad/s`↔`deg/s`, `m/s²`↔`G`) |
+| `livox_ros_driver2/src/ext_imu_bridge.cpp` | **新增** CRC8 帧解析、串口读取线程、ROS2 发布线程 |
+| `livox_ros_driver2/src/livox_ros_driver2.cpp` | 新增 `ext_imu_*` 参数声明 + `InitExtImuBridge()` |
+| `livox_ros_driver2/src/driver_node.h/cpp` | 新增 `ExtImuBridge` 成员 + 析构安全停止 |
+
+#### 协议格式
+```
+帧头: AA 55  |  TYPE(1B) + LEN(1B) + PAYLOAD(LEN bytes) + CRC8(1B)
+CRC-8/DALLAS, 多项式 0x31, 覆盖 TYPE+LEN+PAYLOAD
+IMU_DATA (0x01): 28字节, 1000Hz — counter+gx/gy/gz+ax/ay/az+temp
+STATUS   (0x03): 40字节, 10Hz  — 刻度因子+零偏+运动标志
+```
+
+#### 启动配置 (msg_AGRAS_MID360_launch.py)
+```python
+ext_imu_enable        = True       # 启用外部 IMU
+ext_imu_port          = '/dev/ttyACM0'
+ext_imu_gyro_unit     = 0          # 0=rad/s (Livox/FAST_LIO), 1=deg/s
+ext_imu_accel_unit    = 0          # 0=m/s² (Livox/FAST_LIO), 1=G
+ext_imu_topic         = '/livox/imu'
+ext_imu_publish_rate  = 200.0      # Hz, 数据源 1000Hz
+```
+
+---
+
+### 5. 内置工具脚本
+
+| 脚本 | 用途 | 用法 |
+|------|------|------|
+| `imu_orientation_check.py` | **IMU 坐标系诊断** — 交互式确定安装方向，输出 `extrinsic_R` 并自动写入 YAML | `python3 imu_orientation_check.py --port /dev/ttyACM0` |
+| `imu_protocol_parser.py` | **协议调试工具** — 独立解析 L431_ADI 串口数据流，显示物理量 | `python3 imu_protocol_parser.py --port /dev/ttyACM0` |
+| `start_agras.sh` | 一键启动：Livox 驱动 (含外部 IMU) + FAST-LIO | `./start_agras.sh` |
+
+#### IMU 坐标系诊断流程
+```
+步骤1: 静止 3 秒 → 确定重力方向 (哪个 IMU 轴读数 ~+9.8 m/s²)
+步骤2: 绕 LiDAR Z 旋转 → 自动检测响应最大的 IMU 轴 → LiDAR Z 映射
+步骤3: 绕 LiDAR X 旋转 → 自动检测 → LiDAR X 映射
+步骤4: 绕 LiDAR Y 旋转 → 自动检测 → LiDAR Y 映射
+最终: 输出 3×3 extrinsic_R + 可选自动写入 agras_mid360.yaml
+```
+
+#### FAST-LIO 配置 (agras_mid360.yaml)
+```yaml
+extrinsic_est_en: true              # 在线外参估计
+extrinsic_R: [0, -1, 0,             # IMU→LiDAR 旋转矩阵
+              1,  0, 0,
+              0,  0, 1]
+time_sync_en: false                 # 设为 true 让 FAST-LIO 自动估计时间偏移
+```
+
+---
+
 ## 编译 & 运行
 
 ```bash
