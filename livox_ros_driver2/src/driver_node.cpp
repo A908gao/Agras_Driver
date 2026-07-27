@@ -23,6 +23,7 @@
 //
 
 #include "driver_node.h"
+#include "ext_imu_bridge.h"
 #include "lddc.h"
 
 namespace livox_ros {
@@ -32,10 +33,18 @@ DriverNode& DriverNode::GetNode() noexcept {
 }
 
 DriverNode::~DriverNode() {
+  RCLCPP_INFO(this->get_logger(), "DriverNode shutting down...");
+  if (ext_imu_bridge_) {
+    ext_imu_bridge_->Stop();
+  }
   lddc_ptr_->lds_->RequestExit();
   exit_signal_.set_value();
-  pointclouddata_poll_thread_->join();
-  imudata_poll_thread_->join();
+  if (pointclouddata_poll_thread_ && pointclouddata_poll_thread_->joinable()) {
+    pointclouddata_poll_thread_->join();
+  }
+  if (imudata_poll_thread_ && imudata_poll_thread_->joinable()) {
+    imudata_poll_thread_->join();
+  }
 }
 
 } // namespace livox_ros

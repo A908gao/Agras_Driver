@@ -31,6 +31,7 @@
 #include "include/livox_ros_driver2.h"
 #include "include/ros_headers.h"
 #include "driver_node.h"
+#include "ext_imu_bridge.h"
 #include "lddc.h"
 #include "lds_lidar.h"
 
@@ -138,6 +139,16 @@ DriverNode::DriverNode(const rclcpp::NodeOptions & node_options)
   this->declare_parameter("cmdline_input_bd_code", "000000000000001");
   this->declare_parameter("lvx_file_path", "/home/livox/livox_test.lvx");
 
+  // ── 外部 IMU 桥接器参数 (L431_ADI 协议, ttyACM0) ──────────
+  this->declare_parameter("ext_imu_enable", false);
+  this->declare_parameter("ext_imu_port", "/dev/ttyACM0");
+  this->declare_parameter("ext_imu_baudrate", 921600);
+  this->declare_parameter("ext_imu_gyro_unit", 0);    // 0=rad/s, 1=deg/s
+  this->declare_parameter("ext_imu_accel_unit", 0);   // 0=m/s², 1=G
+  this->declare_parameter("ext_imu_topic", "/livox/imu");
+  this->declare_parameter("ext_imu_frame_id", "livox_frame");
+  this->declare_parameter("ext_imu_publish_rate", 200.0);
+
   this->get_parameter("xfer_format", xfer_format);
   this->get_parameter("multi_topic", multi_topic);
   this->get_parameter("data_src", data_src);
@@ -183,6 +194,46 @@ DriverNode::DriverNode(const rclcpp::NodeOptions & node_options)
 
   pointclouddata_poll_thread_ = std::make_shared<std::thread>(&DriverNode::PointCloudDataPollThread, this);
   imudata_poll_thread_ = std::make_shared<std::thread>(&DriverNode::ImuDataPollThread, this);
+
+  // 初始化外部 IMU 桥接器 (如果启用)
+  InitExtImuBridge();
+}
+
+void DriverNode::InitExtImuBridge()
+{
+  bool ext_imu_enable = false;
+  this->get_parameter("ext_imu_enable", ext_imu_enable);
+  if (!ext_imu_enable) {
+    RCLCPP_INFO(this->get_logger(),
+      "[ExtIMU] External IMU bridge disabled. Using built-in Livox IMU.");
+    return;
+  }
+
+  ExtImuConfig cfg;
+  cfg.enabled = true;
+
+  std::string port_str, topic_str, frame_str;
+  int gyro_unit_int = 0, accel_unit_int = 0;
+
+  this->get_parameter("ext_imu_port", port_str);
+  this->get_parameter("ext_imu_baudrate", cfg.baudrate);
+  this->get_parameter("ext_imu_gyro_unit", gyro_unit_int);
+  this->get_parameter("ext_imu_accel_unit", accel_unit_int);
+  this->get_parameter("ext_imu_topic", topic_str);
+  this->get_parameter("ext_imu_frame_id", frame_str);
+  this->get_parameter("ext_imu_publish_rate", cfg.publish_rate);
+
+  cfg.port       = port_str;
+  cfg.imu_topic  = topic_str;
+  cfg.frame_id   = frame_str;
+  cfg.gyro_unit  = (gyro_unit_int == 1) ? GyroUnit::DEG_PER_S : GyroUnit::RAD_PER_S;
+  cfg.accel_unit = (accel_unit_int == 1) ? AccelUnit::G : AccelUnit::M_PER_S2;
+
+  RCLCPP_INFO(this->get_logger(),
+    "[ExtIMU] External IMU bridge ENABLED — publishing to %s", cfg.imu_topic.c_str());
+
+  ext_imu_bridge_ = std::make_unique<ExtImuBridge>(this, cfg);
+  ext_imu_bridge_->Start();
 }
 
 }  // namespace livox_ros

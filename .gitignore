@@ -1,0 +1,24 @@
+# Build artifacts
+build/
+install/
+log/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+
+# Backup files
+*.bak
+
+# ROS2
+*.pyc
+*.so
+
+# System
+.DS_Store
+Thumbs.db

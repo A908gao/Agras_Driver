@@ -26,14 +26,16 @@
             acc_cov: 0.1
             gyr_cov: 0.1
             b_acc_cov: 0.0001
-            b_gyr_cov: 0.001          # 提高以更快估计陀螺偏置
+            b_gyr_cov: 0.0001          # 提高以更快估计陀螺偏置
             fov_degree:    360.0
             det_range:     50.0
-            extrinsic_est_en:  false
+            extrinsic_est_en:  true      # ★ 启用在线外参估计 (首次运行建议开启)
+                                        #   待标定完成后, 将收敛的 extrinsic_R/T 写入此处并关闭
             extrinsic_T: [ -0.011, -0.02329, 0.04412 ]
-            extrinsic_R: [ 1., 0., 0.,
-                            0., 1., 0.,
-                            0., 0., 1.]
+            extrinsic_R: [ 0., -1., 0.,     
+                            1., 0., 0.,      
+                            0., 0., 1.]      
+
 
         publish:
             path_en: true                # true: publish Path
@@ -44,6 +46,6 @@
             scan_bodyframe_pub_en: true  # true: output the point cloud scans in IMU-body-frame
 
         pcd_save:
-            pcd_save_en: true
+            pcd_save_en: false
             interval: -1                 # how many LiDAR frames saved in each pcd file; 
                                         # -1 : all frames will be saved in ONE pcd file, may lead to memory crash when having too much frames.

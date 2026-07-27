@@ -23,6 +23,17 @@ frame_id      = 'livox_frame'
 lvx_file_path = '/home/livox/livox_test.lvx'
 cmdline_bd_code = 'livox0000000001'
 
+# ── 外部 IMU 桥接器参数 (L431_ADI 协议, 串口 ttyACM0) ────────────
+# 设为 True 以启用外部 ADIS16500 IMU, 与点云同步发布
+ext_imu_enable        = True       # ★ 启用外部 IMU 桥接器
+ext_imu_port          = '/dev/ttyACM0'
+ext_imu_baudrate      = 921600
+ext_imu_gyro_unit     = 0          # 0=rad/s (Livox/FAST_LIO 默认), 1=deg/s
+ext_imu_accel_unit    = 0          # 0=m/s² (Livox/FAST_LIO 默认), 1=G
+ext_imu_topic         = '/livox/imu'
+ext_imu_frame_id      = 'livox_frame'
+ext_imu_publish_rate  = 200.0      # Hz, IMU 数据源 1000Hz, 降频发布
+
 cur_path = os.path.split(os.path.realpath(__file__))[0] + '/'
 cur_config_path = cur_path + '../config'
 user_config_path = os.path.join(cur_config_path, 'AGRAS_MID360_config.json')
@@ -37,7 +48,16 @@ livox_ros2_params = [
     {"frame_id": frame_id},
     {"lvx_file_path": lvx_file_path},
     {"user_config_path": user_config_path},
-    {"cmdline_input_bd_code": cmdline_bd_code}
+    {"cmdline_input_bd_code": cmdline_bd_code},
+    # ── 外部 IMU 参数 ──
+    {"ext_imu_enable":        ext_imu_enable},
+    {"ext_imu_port":          ext_imu_port},
+    {"ext_imu_baudrate":      ext_imu_baudrate},
+    {"ext_imu_gyro_unit":     ext_imu_gyro_unit},
+    {"ext_imu_accel_unit":    ext_imu_accel_unit},
+    {"ext_imu_topic":         ext_imu_topic},
+    {"ext_imu_frame_id":      ext_imu_frame_id},
+    {"ext_imu_publish_rate":  ext_imu_publish_rate},
 ]
 
 

@@ -30,6 +30,8 @@
 namespace livox_ros {
 
 class Lddc;
+class ExtImuBridge;
+struct ExtImuConfig;
 
 #ifdef BUILDING_ROS1
 class DriverNode final : public ros::NodeHandle {
@@ -64,8 +66,10 @@ class DriverNode final : public rclcpp::Node {
  private:
   void PointCloudDataPollThread();
   void ImuDataPollThread();
+  void InitExtImuBridge();     // 初始化外部 IMU 桥接器
 
   std::unique_ptr<Lddc> lddc_ptr_;
+  std::unique_ptr<ExtImuBridge> ext_imu_bridge_;  // 外部串口 IMU
   std::shared_ptr<std::thread> pointclouddata_poll_thread_;
   std::shared_ptr<std::thread> imudata_poll_thread_;
   std::shared_future<void> future_;

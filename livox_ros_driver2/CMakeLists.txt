@@ -271,6 +271,8 @@ else(ROS_EDITION STREQUAL "ROS2")
     src/lds.cpp
     src/lds_lidar.cpp
 
+    src/ext_imu_bridge.cpp
+
     src/comm/comm.cpp
     src/comm/ldq.cpp
     src/comm/semaphore.cpp
