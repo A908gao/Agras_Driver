@@ -1,17 +1,40 @@
-<launch>
-<!-- ============================================================
-     FASTLIO2 LiDAR-IMU 外参标定 — Agras MID360
-     用法: ros2 launch fastlio2 lio_agras_calib_launch.py
-     ============================================================ -->
+import launch
+import launch_ros.actions
+from launch.substitutions import PathJoinSubstitution
+from launch_ros.substitutions import FindPackageShare
 
-	<arg name="rviz" default="true" />
 
-	<node pkg="fastlio2" exec="lio_node" name="laserMapping" output="screen">
-		<param name="config_file" value="$(find-pkg-share fastlio2)/config/agras_calib.yaml"/>
-	</node>
+def generate_launch_description():
+    """FASTLIO2 LiDAR-IMU 外参标定 — Agras MID360"""
 
-	<group if="$(var rviz)">
-	<node pkg="rviz2" exec="rviz2" name="rviz2" args="-d $(find-pkg-share fastlio2)/rviz/fastlio2.rviz" />
-	</group>
+    rviz_cfg = PathJoinSubstitution(
+        [FindPackageShare("fastlio2"), "rviz", "fastlio2.rviz"]
+    )
 
-</launch>
+    config_path = PathJoinSubstitution(
+        [FindPackageShare("fastlio2"), "config", "agras_calib.yaml"]
+    )
+
+    return launch.LaunchDescription(
+        [
+            # Bridge livox_frame → lidar (驱动发布 livox_frame, FASTLIO2 使用 lidar)
+            launch_ros.actions.Node(
+                package="tf2_ros",
+                executable="static_transform_publisher",
+                arguments=["0", "0", "0", "0", "0", "0", "lidar", "livox_frame"],
+            ),
+            launch_ros.actions.Node(
+                package="fastlio2",
+                executable="lio_node",
+                name="laserMapping",
+                output="screen",
+                parameters=[{"config_path": config_path}],
+            ),
+            launch_ros.actions.Node(
+                package="rviz2",
+                executable="rviz2",
+                name="rviz2",
+                arguments=["-d", rviz_cfg],
+            ),
+        ]
+    )
