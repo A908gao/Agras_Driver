@@ -33,7 +33,7 @@ imu_init_num: 20
 near_search_num: 5
 ieskf_max_iter: 5
 
-gravity_align: true            # 静止初始化时自动对齐重力
+gravity_align: false           # 暂时关闭, 避免IMU未稳定时错误对齐
 esti_il: true                  # ★ 启用LiDAR-IMU在线外参标定
 
 # LiDAR-IMU外参初始值 (Identity → 让标定器收敛)
