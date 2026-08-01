@@ -36,8 +36,8 @@ ieskf_max_iter: 5
 gravity_align: false           # 暂时关闭, 避免IMU未稳定时错误对齐
 esti_il: true                  # ★ 启用LiDAR-IMU在线外参标定
 
-# LiDAR-IMU外参初始值 (Identity → 让标定器收敛)
-r_il: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
-t_il: [0.0, 0.0, 0.0]
+# LiDAR-IMU外参初始值 (与 FAST_LIO agras_mid360.yaml 保持一致)
+r_il: [0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+t_il: [-0.011, -0.02329, 0.04412]
 
 lidar_cov_inv: 1000.0
