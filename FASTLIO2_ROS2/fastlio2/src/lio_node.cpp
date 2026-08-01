@@ -117,11 +117,6 @@ public:
     {
         std::lock_guard<std::mutex> lock(m_state_data.imu_mutex);
         double timestamp = Utils::getSec(msg->header);
-        if (timestamp < m_state_data.last_imu_time)
-        {
-            RCLCPP_WARN(this->get_logger(), "IMU Message out of order, skipping (dt=%.6f)", m_state_data.last_imu_time - timestamp);
-            return;  // 跳过乱序消息，不清空缓冲
-        }
         m_state_data.imu_buffer.emplace_back(V3D(msg->linear_acceleration.x, msg->linear_acceleration.y, msg->linear_acceleration.z) * 10.0,
                                              V3D(msg->angular_velocity.x, msg->angular_velocity.y, msg->angular_velocity.z),
                                              timestamp);
