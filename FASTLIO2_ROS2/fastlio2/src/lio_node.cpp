@@ -37,6 +37,8 @@ struct StateData
     std::mutex lidar_mutex;
     double last_lidar_time = -1.0;
     double last_imu_time = -1.0;
+    double imu_lidar_time_offset = 0.0;  // IMU时间 - LiDAR时间 的偏移量
+    bool time_offset_calibrated = false;
     std::deque<IMUData> imu_buffer;
     std::deque<std::pair<double, pcl::PointCloud<pcl::PointXYZINormal>::Ptr>> lidar_buffer;
     nav_msgs::msg::Path path;
@@ -149,11 +151,28 @@ public:
             m_package.cloud_end_time = m_package.cloud_start_time + m_package.cloud->points.back().curvature / 1000.0;
             m_state_data.lidar_pushed = true;
         }
-        if (m_state_data.last_imu_time < m_package.cloud_end_time)
+
+        // 自同步: 估算 IMU 与 LiDAR 的时钟偏移
+        if (!m_state_data.time_offset_calibrated && m_state_data.lidar_pushed)
+        {
+            double imu_time = m_state_data.imu_buffer.back().time;
+            double lidar_time = m_package.cloud_start_time;
+            if (std::abs(imu_time - lidar_time) > 0.1)
+            {
+                m_state_data.imu_lidar_time_offset = lidar_time - imu_time;
+                m_state_data.time_offset_calibrated = true;
+                RCLCPP_INFO(this->get_logger(), "Time offset calibrated: IMU→LiDAR = %.6fs", m_state_data.imu_lidar_time_offset);
+            }
+        }
+
+        // 等待足够的IMU数据 (考虑时钟偏移)
+        double adjusted_imu_time = m_state_data.last_imu_time + m_state_data.imu_lidar_time_offset;
+        if (adjusted_imu_time < m_package.cloud_end_time)
             return false;
 
         Vec<IMUData>().swap(m_package.imus);
-        while (!m_state_data.imu_buffer.empty() && m_state_data.imu_buffer.front().time < m_package.cloud_end_time)
+        while (!m_state_data.imu_buffer.empty() &&
+               (m_state_data.imu_buffer.front().time + m_state_data.imu_lidar_time_offset) < m_package.cloud_end_time)
         {
             m_package.imus.emplace_back(m_state_data.imu_buffer.front());
             m_state_data.imu_buffer.pop_front();
