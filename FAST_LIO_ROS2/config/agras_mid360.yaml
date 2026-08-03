@@ -1,51 +1,51 @@
 /**:
-    ros__parameters:
-        feature_extract_enable: false
-        point_filter_num: 3
-        max_iteration: 3
-        filter_size_surf: 0.5
-        filter_size_map: 0.5
-        cube_side_length: 1000.0
-        runtime_pos_log_enable: false
-        map_file_path: "./test.pcd"
+  ros__parameters:
+    # ============================================================
+    # Agras MID360 — 内置 Livox IMU 配置
+    # ============================================================
+    feature_extract_enable: false
+    point_filter_num: 3
+    max_iteration: 3
+    filter_size_surf: 0.5
+    filter_size_map: 0.5
+    cube_side_length: 1000.0
+    runtime_pos_log_enable: false
+    map_file_path: "./test.pcd"
 
-        common:
-            lid_topic:  "/livox/lidar"
-            imu_topic:  "/livox/imu"
-            time_sync_en: false         # Agras: IMU和LiDAR同一时钟源
-            time_offset_lidar_to_imu: 0.0
+    common:
+        lid_topic:  "/livox/lidar"
+        imu_topic:  "/livox/imu"
+        time_sync_en: false        # 内置 IMU 与 LiDAR 同 SDK 时钟, 已同步
+        time_offset_lidar_to_imu: 0.0
 
-        preprocess:
-            lidar_type: 1                # 1 for Livox serials LiDAR
-            scan_line:  4
-            blind: 0.3
-            timestamp_unit: 3
-            scan_rate: 10                # Match publish_freq (10Hz)
+    preprocess:
+        lidar_type: 1                # Livox MID360
+        scan_line:  4
+        blind: 0.3
+        timestamp_unit: 3            # US
+        scan_rate: 10
 
-        mapping:
-            acc_cov: 0.1
-            gyr_cov: 0.1
-            b_acc_cov: 0.0001
-            b_gyr_cov: 0.0001          # 提高以更快估计陀螺偏置
-            fov_degree:    360.0
-            det_range:     50.0
-            extrinsic_est_en:  true      # ★ 启用在线外参估计 (首次运行建议开启)
-                                        #   待标定完成后, 将收敛的 extrinsic_R/T 写入此处并关闭
-            extrinsic_T: [ -0.011, -0.02329, 0.04412 ]
-            extrinsic_R: [ 0., -1., 0.,     
-                            1., 0., 0.,      
-                            0., 0., 1.]      
+    mapping:
+        acc_cov: 0.1
+        gyr_cov: 0.1
+        b_acc_cov: 0.0001
+        b_gyr_cov: 0.0001
+        fov_degree:    360.0
+        det_range:     50.0
+        extrinsic_est_en:  false
+        extrinsic_T: [ 0.0, 0.0, 0.0 ]
+        extrinsic_R: [ 1., 0., 0.,
+                       0., 1., 0.,
+                       0., 0., 1.]
 
+    publish:
+        path_en: true
+        effect_map_en: false
+        map_en: true
+        scan_publish_en:  true
+        dense_publish_en: false
+        scan_bodyframe_pub_en: true
 
-        publish:
-            path_en: true                # true: publish Path
-            effect_map_en: false         # true: publish Effects
-            map_en: true                 # true: publish Map cloud
-            scan_publish_en:  true       # false: close all the point cloud output
-            dense_publish_en: false      # false: low down the points number in a global-frame point clouds scan.
-            scan_bodyframe_pub_en: true  # true: output the point cloud scans in IMU-body-frame
-
-        pcd_save:
-            pcd_save_en: false
-            interval: -1                 # how many LiDAR frames saved in each pcd file; 
-                                        # -1 : all frames will be saved in ONE pcd file, may lead to memory crash when having too much frames.
+    pcd_save:
+        pcd_save_en: false
+        interval: -1

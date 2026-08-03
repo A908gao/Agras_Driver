@@ -358,7 +358,7 @@ void imu_cbk(const sensor_msgs::msg::Imu::UniquePtr msg_in)
     if (abs(timediff_lidar_wrt_imu) > 0.1 && time_sync_en)
     {
         msg->header.stamp = \
-        rclcpp::Time(timediff_lidar_wrt_imu + get_time_sec(msg_in->header.stamp));
+        get_ros_time(timediff_lidar_wrt_imu + get_time_sec(msg_in->header.stamp));
     }
 
     double timestamp = get_time_sec(msg->header.stamp);

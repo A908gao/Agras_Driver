@@ -1,25 +1,29 @@
 /**
  * @file ext_imu_bridge.h
- * @brief L431_ADI 外部 IMU 桥接器 — 内嵌于 Livox ROS2 驱动
+ * @brief L431_ADI 外部 IMU 桥接器 — MAVLink v2 解析 (官方库)
  *
- * 从串口 (ttyACM0) 读取 ADIS16500/ADIS16470 IMU 二进制协议帧，
- * 解析并发布为 sensor_msgs::msg::Imu，与 Livox 点云同步输出。
+ * 从串口 (/dev/ttyIMU) 接收 MAVLink v2 HIGHRES_IMU 数据，
+ * 解析并发布为 sensor_msgs::msg::Imu。
  *
- * 协议: L431_ADI v2.0, 帧头 AA 55, CRC-8/DALLAS
- * 单位标志位: 可独立切换陀螺 (rad/s ↔ deg/s) 和加速度 (m/s² ↔ G)
+ * CRC/帧解析/零尾修剪: 全部委托 MAVLink 官方库, 无手写逻辑。
  */
 
 #ifndef LIVOX_EXT_IMU_BRIDGE_H
 #define LIVOX_EXT_IMU_BRIDGE_H
 
 #include <atomic>
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
-#include <vector>
+#include <utility>
 
 #include "include/ros_headers.h"
+
+// MAVLink 配置 (无命名空间, C 接口)
+#define MAVLINK_COMM_NUM_BUFFERS 1
+#include "mavlink/common/mavlink.h"
 
 namespace livox_ros {
 
@@ -30,13 +34,13 @@ enum class AccelUnit : uint8_t { M_PER_S2  = 0, G          = 1 };
 // ── 配置 ──────────────────────────────────────────────────────────────
 struct ExtImuConfig {
     bool      enabled       = false;
-    std::string port        = "/dev/ttyACM0";
+    std::string port        = "/dev/ttyIMU";
     int       baudrate      = 921600;
     GyroUnit  gyro_unit     = GyroUnit::RAD_PER_S;
     AccelUnit accel_unit    = AccelUnit::M_PER_S2;
     std::string imu_topic   = "/livox/imu";
     std::string frame_id    = "livox_frame";
-    double    publish_rate  = 200.0;   // Hz, IMU 数据源 1000Hz, 降频发布
+    double    publish_rate  = 500.0;   // Hz, ★ 外置IMU 500Hz, 逐采样发布
 };
 
 /**
@@ -84,27 +88,16 @@ class ExtImuBridge {
         float    latest_accel[3];  // m/s²
         float    latest_temp;      // °C
         uint16_t latest_counter;
+        uint64_t imu_dropped;
+        uint64_t imu_published;
+        double   imu_interval_ms;  // 最近两帧IMU间隔
     };
     Stats GetStats() const;
 
   private:
-    // ── 协议解析 (状态机) ─────────────────────────────────────────
-    static constexpr uint8_t SYNC0 = 0xAA;
-    static constexpr uint8_t SYNC1 = 0x55;
-    static constexpr uint8_t TYPE_IMU_DATA  = 0x01;
-    static constexpr uint8_t TYPE_STATUS    = 0x03;
-    static constexpr uint8_t TYPE_HEARTBEAT = 0x02;
-    static constexpr uint8_t TYPE_DEBUG     = 0x00;
-    static constexpr uint8_t MAX_PAYLOAD    = 128;
-
-    // CRC-8/DALLAS 查找表
-    static const uint8_t kCrc8Table[256];
-    static uint8_t Crc8(const uint8_t* data, uint8_t len);
-
-    // 状态机
-    enum class RxState { SYNC0, SYNC1, TYPE, LEN, PAYLOAD, CRC };
-    void FeedByte(uint8_t byte);
-    void Dispatch(uint8_t type, const uint8_t* payload, uint8_t len);
+    // ── MAVLink v2 解析 ─────────────────────────────────────────
+    mavlink_message_t  mav_msg_;
+    mavlink_status_t   mav_status_;
 
     // ── 串口读写 ──────────────────────────────────────────────────
     void SerialThread();
@@ -124,31 +117,40 @@ class ExtImuBridge {
     std::atomic<bool> running_{false};
     std::atomic<bool> connected_{false};
 
-    RxState rx_state_ = RxState::SYNC0;
-    uint8_t rx_buf_[MAX_PAYLOAD + 2];  // TYPE + LEN + PAYLOAD
-    uint8_t rx_type_ = 0;
-    uint8_t rx_len_  = 0;
-    uint8_t rx_idx_  = 0;
-
-    // 标定参数 (由 STATUS 帧更新)
-    float gyro_scale_  = 2.663161e-08f;
-    float accel_scale_ = 1.870470e-07f;
-    float temp_scale_  = 0.1f;
-    float gbias_[3]    = {0, 0, 0};   // deg/s
-    float aoffs_[3]    = {0, 0, 0};   // m/s²
-
-    // 最新 IMU 数据
+    // 最新 IMU 数据 + 时间戳
     mutable std::mutex data_mutex_;
-    float latest_gyro_[3]  = {0, 0, 0};   // rad/s (内部存储)
+    float latest_gyro_[3]  = {0, 0, 0};   // rad/s
     float latest_accel_[3] = {0, 0, 9.8f}; // m/s²
     float latest_temp_     = 0.0f;
-    uint16_t latest_counter_ = 0;
+    uint64_t latest_ts_us_ = 0;            // MAVLink time_usec (MCU 采样时刻, us)
+
+    // ── 逐采样队列 (SerialThread → PublishThread) ────────────────
+    //   替代原来的 "latest value" 模式, 确保不丢帧、时间戳真实连续
+    struct ImuSample {
+        uint64_t ts_us;     // MAVLink 时间戳 (us, MCU 时钟)
+        float gx, gy, gz;   // rad/s
+        float ax, ay, az;   // m/s²
+        float temp;         // °C
+    };
+    static constexpr size_t kQueueMaxSize = 64;  // ~128ms @ 500Hz
+    std::deque<ImuSample> imu_queue_;
+    std::mutex queue_mutex_;
+    uint64_t imu_dropped_     = 0;       // 队列满时丢弃数
+    ImuSample last_published_ = {0, 0,0,0, 0,0,0, 0};  // 最近一次发布的数据(诊断用)
+    bool      last_published_valid_ = false;
+
+    // ── 时钟映射: MCU time_usec → ROS steady_time ────────────────
+    //   ROS_stamp = mcu_to_ros_slope_ * MCU_time_usec + mcu_to_ros_intercept_
+    bool   mcu_clock_synced_ = false;
+    double mcu_to_ros_slope_     = 1.0;
+    double mcu_to_ros_intercept_ = 0.0;
+    uint64_t mcu_base_us_   = 0;
+    std::chrono::steady_clock::time_point ros_base_tp_;
 
     // 统计
-    uint64_t frame_count_  = 0;
-    uint64_t crc_err_      = 0;
-    uint64_t imu_count_    = 0;
-    uint64_t status_count_ = 0;
+    uint64_t mav_frame_count_ = 0;
+    uint64_t mav_crc_err_     = 0;
+    uint64_t imu_count_       = 0;
 
     // 线程
     std::unique_ptr<std::thread> serial_thread_;
