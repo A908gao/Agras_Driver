@@ -27,25 +27,24 @@
             acc_cov: 0.1
             gyr_cov: 0.1
             b_acc_cov: 0.0001
-            b_gyr_cov: 0.001           # 提高以更快收敛陀螺偏置 (外置IMU需重新估计)
+            b_gyr_cov: 0.0001
             fov_degree:    360.0
             det_range:     50.0
-            extrinsic_est_en:  false     # LI-Init 已标定, 关闭在线估计
-            extrinsic_T: [ 0.089299, -0.069902, 0.213543 ]
-            extrinsic_R: [ 0.054884, 0.998303, -0.019466,
-                           0.995874, -0.056140, -0.071290,
-                           0.072262, 0.015473, 0.997266 ]      
+            extrinsic_est_en:  false
+            extrinsic_T: [ 0.089, 0.01, -0.21 ]
+            extrinsic_R: [ 1., 0., 0.,
+                        0., 1., 0.,
+                        0., 0., 1.] 
 
 
         publish:
-            path_en: true                # true: publish Path
-            effect_map_en: false         # true: publish Effects
-            map_en: true                 # true: publish Map cloud
-            scan_publish_en:  true       # false: close all the point cloud output
-            dense_publish_en: false      # false: low down the points number in a global-frame point clouds scan.
-            scan_bodyframe_pub_en: true  # true: output the point cloud scans in IMU-body-frame
+            path_en: true
+            effect_map_en: false
+            map_en: true
+            scan_publish_en:  true
+            dense_publish_en: false
+            scan_bodyframe_pub_en: true
 
         pcd_save:
             pcd_save_en: false
-            interval: -1                 # how many LiDAR frames saved in each pcd file; 
-                                        # -1 : all frames will be saved in ONE pcd file, may lead to memory crash when having too much frames.
+            interval: -1

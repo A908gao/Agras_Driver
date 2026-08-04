@@ -155,7 +155,7 @@ void ExtImuBridge::SerialThread() {
                                 latest_ts_us_    = imu_data.time_usec;
                             }
 
-                            // 推入逐采样队列
+                            // 推入逐采样队列 — 原始数据直通, MCU固件负责坐标系对齐
                             {
                                 std::lock_guard<std::mutex> lock(queue_mutex_);
                                 if (imu_queue_.size() >= kQueueMaxSize) {

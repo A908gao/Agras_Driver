@@ -151,6 +151,7 @@ if(ROS_EDITION STREQUAL "ROS1")
     ${APR_INCLUDE_DIRS}
     3rdparty
     src
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
   )
 
   #---------------------------------------------------------------------------------------
@@ -308,6 +309,7 @@ else(ROS_EDITION STREQUAL "ROS2")
     ${LIVOX_LIDAR_SDK_INCLUDE_DIR}
     3rdparty
     src
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
   )
 
   # For non-humble distros, add the custom msg include dirs

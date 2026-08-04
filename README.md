@@ -151,22 +151,11 @@ ext_imu_publish_rate  = 200.0      # Hz, 数据源 1000Hz
 
 ---
 
-### 5. 内置工具脚本
+### 5. 启动脚本
 
 | 脚本 | 用途 | 用法 |
 |------|------|------|
-| `imu_orientation_check.py` | **IMU 坐标系诊断** — 交互式确定安装方向，输出 `extrinsic_R` 并自动写入 YAML | `python3 imu_orientation_check.py --port /dev/ttyACM0` |
-| `imu_protocol_parser.py` | **协议调试工具** — 独立解析 L431_ADI 串口数据流，显示物理量 | `python3 imu_protocol_parser.py --port /dev/ttyACM0` |
 | `start_agras.sh` | 一键启动：Livox 驱动 (含外部 IMU) + FAST-LIO | `./start_agras.sh` |
-
-#### IMU 坐标系诊断流程
-```
-步骤1: 静止 3 秒 → 确定重力方向 (哪个 IMU 轴读数 ~+9.8 m/s²)
-步骤2: 绕 LiDAR Z 旋转 → 自动检测响应最大的 IMU 轴 → LiDAR Z 映射
-步骤3: 绕 LiDAR X 旋转 → 自动检测 → LiDAR X 映射
-步骤4: 绕 LiDAR Y 旋转 → 自动检测 → LiDAR Y 映射
-最终: 输出 3×3 extrinsic_R + 可选自动写入 agras_mid360.yaml
-```
 
 #### FAST-LIO 配置 (agras_mid360.yaml)
 ```yaml

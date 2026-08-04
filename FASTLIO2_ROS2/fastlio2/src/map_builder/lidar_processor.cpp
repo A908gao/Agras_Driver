@@ -167,6 +167,9 @@ void LidarProcessor::process(SyncPackage &package)
     {
         pcl::copyPointCloud(*package.cloud, *m_cloud_down_lidar);
     }
+    static int frame_cnt = 0;
+    if (++frame_cnt % 10 == 0)
+        std::cerr << "[DEBUG] cloud_in=" << package.cloud->size() << " cloud_down=" << m_cloud_down_lidar->size() << std::endl;
     trimCloudMap();
     m_kf->update();
     incrCloudMap();

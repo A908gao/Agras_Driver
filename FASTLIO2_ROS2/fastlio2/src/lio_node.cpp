@@ -33,6 +33,7 @@ struct NodeConfig
 struct StateData
 {
     bool lidar_pushed = false;
+    int lidar_scan_count = 0;        // 跳过前几帧再标定时间偏移
     std::mutex imu_mutex;
     std::mutex lidar_mutex;
     double last_lidar_time = -1.0;
@@ -113,13 +114,21 @@ public:
         m_builder_config.t_il << t_il_vec[0], t_il_vec[1], t_il_vec[2];
         m_builder_config.r_il << r_il_vec[0], r_il_vec[1], r_il_vec[2], r_il_vec[3], r_il_vec[4], r_il_vec[5], r_il_vec[6], r_il_vec[7], r_il_vec[8];
         m_builder_config.lidar_cov_inv = config["lidar_cov_inv"].as<double>();
+
+        // 时间偏移: 若 YAML 显式设置则直接使用, 跳过自动标定
+        if (config["time_offset_lidar_to_imu"]) {
+            m_state_data.imu_lidar_time_offset = config["time_offset_lidar_to_imu"].as<double>();
+            m_state_data.time_offset_calibrated = true;
+            RCLCPP_INFO(this->get_logger(), "Time offset from config: %.6fs", m_state_data.imu_lidar_time_offset);
+        }
     }
 
     void imuCB(const sensor_msgs::msg::Imu::SharedPtr msg)
     {
         std::lock_guard<std::mutex> lock(m_state_data.imu_mutex);
         double timestamp = Utils::getSec(msg->header);
-        m_state_data.imu_buffer.emplace_back(V3D(msg->linear_acceleration.x, msg->linear_acceleration.y, msg->linear_acceleration.z) * 10.0,
+        // Agras: ext_imu_bridge 已输出 m/s², 无需 ×10.0 转换
+        m_state_data.imu_buffer.emplace_back(V3D(msg->linear_acceleration.x, msg->linear_acceleration.y, msg->linear_acceleration.z),
                                              V3D(msg->angular_velocity.x, msg->angular_velocity.y, msg->angular_velocity.z),
                                              timestamp);
         m_state_data.last_imu_time = timestamp;
@@ -133,6 +142,7 @@ public:
         {
             RCLCPP_WARN(this->get_logger(), "Lidar Message is out of order");
             std::deque<std::pair<double, pcl::PointCloud<pcl::PointXYZINormal>::Ptr>>().swap(m_state_data.lidar_buffer);
+            m_state_data.lidar_pushed = false;  // 清空缓冲区时重置推送标志
         }
         m_state_data.lidar_buffer.emplace_back(timestamp, cloud);
         m_state_data.last_lidar_time = timestamp;
@@ -150,18 +160,20 @@ public:
             m_package.cloud_start_time = m_state_data.lidar_buffer.front().first;
             m_package.cloud_end_time = m_package.cloud_start_time + m_package.cloud->points.back().curvature / 1000.0;
             m_state_data.lidar_pushed = true;
-        }
 
-        // 自同步: 估算 IMU 与 LiDAR 的时钟偏移
-        if (!m_state_data.time_offset_calibrated && m_state_data.lidar_pushed)
-        {
-            double imu_time = m_state_data.imu_buffer.back().time;
-            double lidar_time = m_package.cloud_start_time;
-            if (std::abs(imu_time - lidar_time) > 0.1)
+            // 自同步: 等前 10 帧过后再标定 (避免驱动冷启动缓冲导致的假偏移)
+            if (!m_state_data.time_offset_calibrated)
             {
-                m_state_data.imu_lidar_time_offset = lidar_time - imu_time;
-                m_state_data.time_offset_calibrated = true;
-                RCLCPP_INFO(this->get_logger(), "Time offset calibrated: IMU→LiDAR = %.6fs", m_state_data.imu_lidar_time_offset);
+                m_state_data.lidar_scan_count++;
+                if (m_state_data.lidar_scan_count > 10)
+                {
+                    double imu_time = m_state_data.imu_buffer.back().time;
+                    double lidar_time = m_package.cloud_start_time;
+                    m_state_data.imu_lidar_time_offset = lidar_time - imu_time;
+                    m_state_data.time_offset_calibrated = true;
+                    RCLCPP_INFO(this->get_logger(), "Time offset calibrated (scan %d): IMU→LiDAR = %.6fs",
+                                m_state_data.lidar_scan_count, m_state_data.imu_lidar_time_offset);
+                }
             }
         }
 

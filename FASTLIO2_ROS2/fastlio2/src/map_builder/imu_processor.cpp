@@ -27,16 +27,24 @@ bool IMUProcessor::initialize(SyncPackage &package)
     }
     acc_mean /= static_cast<double>(m_imu_cache.size());
     gyro_mean /= static_cast<double>(m_imu_cache.size());
+    std::cerr << "[IMU INIT] acc_mean=[" << acc_mean.transpose() << "] norm=" << acc_mean.norm()
+              << " gyro_mean=[" << gyro_mean.transpose() << "]" << std::endl;
     m_kf->x().r_il = m_config.r_il;
     m_kf->x().t_il = m_config.t_il;
     m_kf->x().bg = gyro_mean;
+
+    // 用实测重力幅值, 避免 9.81 硬编码导致虚假加速度残留
+    double gravity_norm = acc_mean.norm();
+
     if (m_config.gravity_align)
     {
         m_kf->x().r_wi = (Eigen::Quaterniond::FromTwoVectors((-acc_mean).normalized(), V3D(0.0, 0.0, -1.0)).matrix());
-        m_kf->x().initGravityDir(V3D(0, 0, -1.0));
+        m_kf->x().g = V3D(0, 0, -gravity_norm);
     }
     else
-        m_kf->x().initGravityDir(-acc_mean);
+    {
+        m_kf->x().g = -acc_mean;   // 直接取实测值, 保留方向和幅值
+    }
     m_kf->P().setIdentity();
     m_kf->P().block<3, 3>(6, 6) = M3D::Identity() * 0.00001;
     m_kf->P().block<3, 3>(9, 9) = M3D::Identity() * 0.00001;
@@ -125,6 +133,11 @@ void IMUProcessor::undistort(SyncPackage &package)
             it_pcl->x = p_compensate(0);
             it_pcl->y = p_compensate(1);
             it_pcl->z = p_compensate(2);
+            if (!std::isfinite(p_compensate(0)) || !std::isfinite(p_compensate(1)) || !std::isfinite(p_compensate(2)))
+            {
+                std::cerr << "[ERROR] undistort produced NaN! imu_acc=[" << imu_acc.transpose()
+                          << "] imu_vel=[" << imu_vel.transpose() << "] dt=" << dt << std::endl;
+            }
             if (it_pcl == package.cloud->points.begin())
                 break;
         }

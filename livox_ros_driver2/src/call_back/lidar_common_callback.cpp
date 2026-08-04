@@ -42,7 +42,7 @@ void LidarCommonCallback::OnLidarPointClounCb(PointFrame* frame, void* client_da
   }
 
   if (frame->lidar_num ==0) {
-    printf("LidarPointCloudCb lidar_num:%u.\n", frame->lidar_num);
+    // 无有效雷达数据, 静默跳过
     return;
   }
 

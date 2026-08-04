@@ -207,7 +207,7 @@ void PubHandler::CheckTimer(uint32_t id) {
     if (now_time - last_pub_time_ < std::chrono::nanoseconds(publish_interval_)) {
       return;
     }
-    last_pub_time_ += std::chrono::nanoseconds(publish_interval_);
+    last_pub_time_ = now_time;  // 直接用当前时间, 避免 += 累积漂移
     for (auto &process_handler : lidar_process_handlers_) {
       frame_.base_time[frame_.lidar_num] = process_handler.second->GetLidarBaseTime();
       uint32_t handle = process_handler.first;
@@ -223,8 +223,11 @@ void PubHandler::CheckTimer(uint32_t id) {
       lidar_point.points = points_[handle].data();
       frame_.lidar_num++;
     }
-    PublishPointCloud();
-    frame_.lidar_num = 0;
+    // 仅在有有效点云数据时才发布
+    if (frame_.lidar_num != 0) {
+      PublishPointCloud();
+      frame_.lidar_num = 0;
+    }
   }
   return;
 }

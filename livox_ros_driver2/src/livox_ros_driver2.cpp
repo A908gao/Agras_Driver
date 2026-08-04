@@ -139,9 +139,9 @@ DriverNode::DriverNode(const rclcpp::NodeOptions & node_options)
   this->declare_parameter("cmdline_input_bd_code", "000000000000001");
   this->declare_parameter("lvx_file_path", "/home/livox/livox_test.lvx");
 
-  // ── 外部 IMU 桥接器参数 (L431_ADI 协议, ttyACM0) ──────────
+  // ── 外部 IMU 桥接器参数 (L431_ADI 协议, /dev/ttyIMU) ──────────
   this->declare_parameter("ext_imu_enable", false);
-  this->declare_parameter("ext_imu_port", "/dev/ttyACM0");
+  this->declare_parameter("ext_imu_port", "/dev/ttyIMU");
   this->declare_parameter("ext_imu_baudrate", 921600);
   this->declare_parameter("ext_imu_gyro_unit", 0);    // 0=rad/s, 1=deg/s
   this->declare_parameter("ext_imu_accel_unit", 0);   // 0=m/s², 1=G
@@ -193,7 +193,16 @@ DriverNode::DriverNode(const rclcpp::NodeOptions & node_options)
   }
 
   pointclouddata_poll_thread_ = std::make_shared<std::thread>(&DriverNode::PointCloudDataPollThread, this);
-  imudata_poll_thread_ = std::make_shared<std::thread>(&DriverNode::ImuDataPollThread, this);
+
+  // 启用外部 IMU 时禁掉内置 IMU 轮询, 避免双发布者冲突
+  bool ext_imu_enabled = false;
+  this->get_parameter("ext_imu_enable", ext_imu_enabled);
+  if (!ext_imu_enabled) {
+    imudata_poll_thread_ = std::make_shared<std::thread>(&DriverNode::ImuDataPollThread, this);
+    RCLCPP_INFO(this->get_logger(), "Built-in Livox IMU ENABLED");
+  } else {
+    RCLCPP_INFO(this->get_logger(), "Built-in Livox IMU DISABLED (using external IMU)");
+  }
 
   // 初始化外部 IMU 桥接器 (如果启用)
   InitExtImuBridge();

@@ -23,6 +23,12 @@ def generate_launch_description():
                 executable="static_transform_publisher",
                 arguments=["0", "0", "0", "0", "0", "0", "lidar", "livox_frame"],
             ),
+            # 初始 body 帧占位 (MAPPING 阶段后由 FASTLIO2 接管)
+            launch_ros.actions.Node(
+                package="tf2_ros",
+                executable="static_transform_publisher",
+                arguments=["0", "0", "0", "0", "0", "0", "lidar", "body"],
+            ),
             launch_ros.actions.Node(
                 package="fastlio2",
                 executable="lio_node",

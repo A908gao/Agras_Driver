@@ -20,7 +20,9 @@ pcl::PointCloud<pcl::PointXYZINormal>::Ptr Utils::livox2PCL(const livox_ros_driv
             p.z = z;
             p.intensity = msg->points[i].reflectivity;
             p.curvature = msg->points[i].offset_time / 1000000.0f;
-            cloud->push_back(p);
+            p.normal_x = p.normal_y = p.normal_z = 0.0f;
+            if (std::isfinite(x) && std::isfinite(y) && std::isfinite(z))
+                cloud->push_back(p);
         }
     }
     return cloud;
