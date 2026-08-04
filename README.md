@@ -2,9 +2,9 @@
 
 基于 Livox MID360 激光雷达 + ADIS16500 外部 IMU 的高精度 SLAM 方案。
 
-**系统架构**: `L431_ADI (MCU固件)` → ttyACM0 → `ext_imu_bridge (本驱动)` → `/livox/imu` → `FAST-LIO`
+**系统架构**: `L431_ADI (MCU固件)` → ttyIMU → `ext_imu_bridge (本驱动)` → `/livox/imu` → `FAST-LIO`
 
-> **配套 MCU 固件**: [L431_ADI](https://gitcode.com/gcw_4Fu256zc/L431_ADI/tree/v1.0) — STM32L431RCTx + FreeRTOS，驱动 ADIS16500/16470/16505 IMU，1000Hz SPI 采集 + 二进制协议输出，支持陀螺/加速度计自动校准。
+> **配套 MCU 固件**: [L431_ADI](https://gitcode.com/gcw_4Fu256zc/L431_ADI/tree/v1.0) — STM32L431RCTx + FreeRTOS，驱动 ADIS16500/16470/16505 IMU，1000Hz SPI 采集 + MAVLink v2 协议输出，支持陀螺/加速度计自动校准。
 
 ---
 
@@ -121,32 +121,41 @@ Agras 固件在无激光回波时生成距离恰好 **200m**、反射率为 **0*
 ### 4. 外部 IMU 桥接器 (L431_ADI) — **新增**
 
 对接 [L431_ADI](https://gitcode.com/gcw_4Fu256zc/L431_ADI/tree/v1.0) MCU 固件，
-从串口 `/dev/ttyACM0` 读取 ADIS16500/ADIS16470 外部高精度 IMU，
+从串口 `/dev/ttyIMU` 读取 ADIS16500/ADIS16470 外部高精度 IMU，
 替代 Livox 内置 IMU，提升 SLAM 精度。
 
 | 文件 | 说明 |
 |------|------|
 | `livox_ros_driver2/src/ext_imu_bridge.h` | **新增** 桥接器类声明，单位枚举 (`rad/s`↔`deg/s`, `m/s²`↔`G`) |
-| `livox_ros_driver2/src/ext_imu_bridge.cpp` | **新增** CRC8 帧解析、串口读取线程、ROS2 发布线程 |
+| `livox_ros_driver2/src/ext_imu_bridge.cpp` | **新增** MAVLink v2 解析、串口读取线程、ROS2 发布线程 |
 | `livox_ros_driver2/src/livox_ros_driver2.cpp` | 新增 `ext_imu_*` 参数声明 + `InitExtImuBridge()` |
 | `livox_ros_driver2/src/driver_node.h/cpp` | 新增 `ExtImuBridge` 成员 + 析构安全停止 |
 
 #### 协议格式
+MCU 固件通过串口发送 **MAVLink v2** 协议帧，驱动使用官方 MAVLink C 库解析：
+
 ```
-帧头: AA 55  |  TYPE(1B) + LEN(1B) + PAYLOAD(LEN bytes) + CRC8(1B)
-CRC-8/DALLAS, 多项式 0x31, 覆盖 TYPE+LEN+PAYLOAD
-IMU_DATA (0x01): 28字节, 1000Hz — counter+gx/gy/gz+ax/ay/az+temp
-STATUS   (0x03): 40字节, 10Hz  — 刻度因子+零偏+运动标志
+MAVLink v2 帧结构:
+  STX(0xFD) + LEN + INCOMPAT_FLAGS + COMPAT_FLAGS + SEQ
+  + SYSID + COMPID + MSGID(3B) + PAYLOAD + CHECKSUM(2B)
+
+消息类型: HIGHRES_IMU (msgid=105), 500Hz
+  - time_usec:   MCU 采样时刻 (μs)
+  - xgyro/ygyro/zgyro:  陀螺仪 (rad/s 或 deg/s, 固件可配)
+  - xacc/yacc/zacc:     加速度计 (m/s² 或 G, 固件可配)
+  - temperature:         温度 (°C)
+
+CRC/帧解析/签名验证: 全部委托 MAVLink 官方库，无手写逻辑。
 ```
 
 #### 启动配置 (msg_AGRAS_MID360_launch.py)
 ```python
 ext_imu_enable        = True       # 启用外部 IMU
-ext_imu_port          = '/dev/ttyACM0'
+ext_imu_port          = '/dev/ttyIMU'
 ext_imu_gyro_unit     = 0          # 0=rad/s (Livox/FAST_LIO), 1=deg/s
 ext_imu_accel_unit    = 0          # 0=m/s² (Livox/FAST_LIO), 1=G
 ext_imu_topic         = '/livox/imu'
-ext_imu_publish_rate  = 200.0      # Hz, 数据源 1000Hz
+ext_imu_publish_rate  = 500.0      # Hz, MCU 数据源 500Hz, 逐采样发布
 ```
 
 ---
@@ -177,9 +186,9 @@ cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 make -j
 sudo cp sdk_core/liblivox_lidar_sdk_static.a sdk_core/liblivox_lidar_sdk_shared.so /usr/local/lib/
 
-# 编译驱动 + FAST-LIO
+# 编译全部 ROS2 包
 cd ../.. && source /opt/ros/humble/setup.bash
-colcon build --packages-select livox_ros_driver2 fast_lio --cmake-args -DCMAKE_BUILD_TYPE=Release
+colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
 source install/setup.bash
 
 # 一键启动（自动开两个终端）
