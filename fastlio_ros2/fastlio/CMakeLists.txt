@@ -128,7 +128,7 @@ install(
 # Python diagnostic scripts
 install(PROGRAMS
   src/imu_lidar_sync_diag.py
-  ../imu_lidar_direction_check.py
+  imu_lidar_direction_check.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

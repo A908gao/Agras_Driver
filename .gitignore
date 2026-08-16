@@ -3,6 +3,10 @@ build/
 install/
 log/
 
+# LI-Init runtime outputs (logs + calibration results)
+lidar_imu_init_ros2/Log/
+lidar_imu_init_ros2/result/
+
 # Python
 __pycache__/
 *.pyc

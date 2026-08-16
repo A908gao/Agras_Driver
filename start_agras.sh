@@ -16,7 +16,7 @@
 #     --built-in   使用内置 IMU (默认)
 # ============================================================
 
-WS_DIR="/home/b/Videos/livov_ws"
+WS_DIR="/home/b/Agras_Driver/agras_ws"
 ROS_SETUP="/opt/ros/humble/setup.bash"
 WS_SETUP="$WS_DIR/install/setup.bash"
 
@@ -55,7 +55,9 @@ else
     IMU_LABEL="Built-in"
 fi
 
-SOURCE_CMD="source $ROS_SETUP && source $WS_SETUP"
+# 本板 (RK3588 / Mali-G610) 缺少 Rockchip 的 rknpu DRI 驱动,
+# 强制 Mesa 使用 llvmpipe 软件渲染, 避免 "MESA-LOADER: failed to open rknpu" 报错
+SOURCE_CMD="export LIBGL_ALWAYS_SOFTWARE=1 && source $ROS_SETUP && source $WS_SETUP"
 
 DRIVER_CMD="$SOURCE_CMD && echo '=== Agras MID360 Driver (IMU: $IMU_LABEL) ===' && ros2 launch livox_ros_driver2 msg_AGRAS_MID360_launch.py ext_imu:=$USE_EXT_IMU; exec bash"
 
