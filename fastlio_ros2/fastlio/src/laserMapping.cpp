@@ -288,8 +288,19 @@ void standard_pcl_cbk(const sensor_msgs::msg::PointCloud2::UniquePtr msg)
     double preprocess_start_time = omp_get_wtime();
     if (!is_first_lidar && cur_time < last_timestamp_lidar)
     {
-        std::cerr << "lidar loop back, clear buffer" << std::endl;
-        lidar_buffer.clear();
+        double back = last_timestamp_lidar - cur_time;
+        if (back > 1.0)  // 大回退: 时钟复位/时基切换, 清空重来 (同时清 time_buffer 避免失配)
+        {
+            std::cerr << "lidar time reset (back " << back << "s), clear buffer" << std::endl;
+            lidar_buffer.clear();
+            time_buffer.clear();
+        }
+        else  // 单帧乱序: 只丢这一帧, 不清空缓冲
+        {
+            std::cerr << "lidar frame out of order (back " << back << "s), skip" << std::endl;
+            mtx_buffer.unlock();
+            return;
+        }
     }
     if (is_first_lidar)
     {
@@ -316,8 +327,19 @@ void livox_pcl_cbk(const livox_ros_driver2::msg::CustomMsg::UniquePtr msg)
     scan_count ++;
     if (!is_first_lidar && cur_time < last_timestamp_lidar)
     {
-        std::cerr << "lidar loop back, clear buffer" << std::endl;
-        lidar_buffer.clear();
+        double back = last_timestamp_lidar - cur_time;
+        if (back > 1.0)  // 大回退: 时钟复位/时基切换, 清空重来 (同时清 time_buffer 避免失配)
+        {
+            std::cerr << "lidar time reset (back " << back << "s), clear buffer" << std::endl;
+            lidar_buffer.clear();
+            time_buffer.clear();
+        }
+        else  // 单帧乱序: 只丢这一帧, 不清空缓冲
+        {
+            std::cerr << "lidar frame out of order (back " << back << "s), skip" << std::endl;
+            mtx_buffer.unlock();
+            return;
+        }
     }
     if(is_first_lidar)
     {
@@ -367,8 +389,18 @@ void imu_cbk(const sensor_msgs::msg::Imu::UniquePtr msg_in)
 
     if (timestamp < last_timestamp_imu)
     {
-        std::cerr << "lidar loop back, clear buffer" << std::endl;
-        imu_buffer.clear();
+        double back = last_timestamp_imu - timestamp;
+        if (back > 1.0)  // 大回退: 时钟复位/时基切换, 清空重来
+        {
+            std::cerr << "imu time reset (back " << back << "s), clear buffer" << std::endl;
+            imu_buffer.clear();
+        }
+        else  // 单条乱序: 只丢这一条, 不清空缓冲
+        {
+            std::cerr << "imu msg out of order (back " << back << "s), skip" << std::endl;
+            mtx_buffer.unlock();
+            return;
+        }
     }
 
     last_timestamp_imu = timestamp;

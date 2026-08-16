@@ -34,7 +34,7 @@ def generate_launch_description():
     cmdline_bd_code = 'livox0000000001'
 
     # ── 外部 IMU 桥接器参数 ─────────────────────────────────
-    ext_imu_port          = '/dev/ttyIMU'
+    ext_imu_port          = '/dev/ttyS0'
     ext_imu_baudrate      = 921600
     ext_imu_gyro_unit     = 0          # 0=rad/s, 1=deg/s
     ext_imu_accel_unit    = 0          # 0=m/s², 1=G

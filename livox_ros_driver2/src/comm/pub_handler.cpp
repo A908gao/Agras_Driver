@@ -168,15 +168,27 @@ void PubHandler::CheckTimer(uint32_t id) {
 
   if (PubHandler::is_timestamp_sync_.load()) { // Enable time synchronization
     auto& process_handler = lidar_process_handlers_[id];
-    uint64_t recent_time_ms = process_handler->GetRecentTimeStamp() / kRatioOfMsToNs;
-    if ((recent_time_ms % publish_interval_ms_ != 0) || recent_time_ms == 0) {
+    uint64_t recent_time = process_handler->GetRecentTimeStamp();
+    if (recent_time == 0) {
       return;
     }
 
-    uint64_t diff = process_handler->GetRecentTimeStamp() - process_handler->GetLidarBaseTime();
+    // 不再要求时间戳严格对齐 10ms/100ms 边界 (Agras 帧率 25~33Hz 动态, 时间戳
+    // 不一定落在 100ms 网格上, 原来的 % 判断会静默丢帧); 改为按"距上次发布已满
+    // publish_interval_"判断, 对齐/不对齐都能稳定发布。
+    if (last_pub_timestamp_ == 0) {
+      last_pub_timestamp_ = process_handler->GetLidarBaseTime();
+      return;
+    }
+    if (recent_time - last_pub_timestamp_ < publish_interval_) {
+      return;
+    }
+
+    uint64_t diff = recent_time - process_handler->GetLidarBaseTime();
     if (diff < publish_interval_tolerance_) {
       return;
     }
+    last_pub_timestamp_ = recent_time;
 
     frame_.base_time[frame_.lidar_num] = process_handler->GetLidarBaseTime();
     points_[id].clear();

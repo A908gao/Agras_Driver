@@ -122,6 +122,7 @@ class PubHandler {
   uint64_t publish_interval_tolerance_ = 100000000; //100 ms
   uint64_t publish_interval_ms_ = 100; //100 ms
   TimePoint last_pub_time_;
+  uint64_t last_pub_timestamp_ = 0; // SDK 时间戳 (ns), 同步路径发布节拍用
 
   std::map<uint32_t, std::unique_ptr<LidarPubHandler>> lidar_process_handlers_;
   std::map<uint32_t, std::vector<PointXyzlt>> points_;
