@@ -20,9 +20,14 @@ def generate_launch_description():
     # ── 可配置参数 ──────────────────────────────────────────
     ext_imu_enable_arg = DeclareLaunchArgument(
         'ext_imu', default_value='false',
-        description='启用外部串口IMU (L431_ADI @ ttyACM0), 默认使用内置Livox IMU')
+        description='启用外部串口IMU (L431_ADI), 默认使用内置Livox IMU')
+
+    ext_imu_port_arg = DeclareLaunchArgument(
+        'ext_imu_port', default_value='/dev/ttyIMU',
+        description='外部IMU串口设备 (机上 /dev/ttyIMU, 开发机 CP2102=/dev/ttyUSB0)')
 
     ext_imu_enable_lc = LaunchConfiguration('ext_imu')
+    ext_imu_port_lc = LaunchConfiguration('ext_imu_port')
 
     xfer_format   = 1
     multi_topic   = 0
@@ -34,7 +39,6 @@ def generate_launch_description():
     cmdline_bd_code = 'livox0000000001'
 
     # ── 外部 IMU 桥接器参数 ─────────────────────────────────
-    ext_imu_port          = '/dev/ttyS0'
     ext_imu_baudrate      = 921600
     ext_imu_gyro_unit     = 0          # 0=rad/s, 1=deg/s
     ext_imu_accel_unit    = 0          # 0=m/s², 1=G
@@ -58,7 +62,7 @@ def generate_launch_description():
         {"cmdline_input_bd_code": cmdline_bd_code},
         # ── 外部 IMU 参数 ──
         {"ext_imu_enable":        ext_imu_enable_lc},
-        {"ext_imu_port":          ext_imu_port},
+        {"ext_imu_port":          ext_imu_port_lc},
         {"ext_imu_baudrate":      ext_imu_baudrate},
         {"ext_imu_gyro_unit":     ext_imu_gyro_unit},
         {"ext_imu_accel_unit":    ext_imu_accel_unit},
@@ -77,5 +81,6 @@ def generate_launch_description():
 
     return LaunchDescription([
         ext_imu_enable_arg,
+        ext_imu_port_arg,
         livox_driver,
     ])

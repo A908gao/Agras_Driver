@@ -20,6 +20,7 @@
 #include <utility>
 
 #include "include/ros_headers.h"
+#include <nav_msgs/msg/odometry.hpp>
 
 // MAVLink 配置 (无命名空间, C 接口)
 #define MAVLINK_COMM_NUM_BUFFERS 1
@@ -41,6 +42,9 @@ struct ExtImuConfig {
     std::string imu_topic   = "/livox/imu";
     std::string frame_id    = "livox_frame";
     double    publish_rate  = 500.0;   // Hz, ★ 外置IMU 500Hz, 逐采样发布
+    bool      publish_orientation = true;  // 解析固件 ATTITUDE → 发布 ENU 姿态四元数
+    bool      publish_odometry    = true;  // 解析固件 ODOMETRY → 发布 Odometry 话题
+    std::string odom_topic        = "/livox/odom";
 };
 
 /**
@@ -84,6 +88,8 @@ class ExtImuBridge {
         uint64_t crc_err;
         uint64_t imu_count;
         uint64_t status_count;
+        uint64_t attitude_count;   // 已解析的 ATTITUDE 帧数
+        uint64_t odometry_count;   // 已解析的 ODOMETRY 帧数
         float    latest_gyro[3];   // rad/s
         float    latest_accel[3];  // m/s²
         float    latest_temp;      // °C
@@ -108,6 +114,17 @@ class ExtImuBridge {
 
     rclcpp::Node* node_;               // 非拥有
     rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub_;
+    rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
+
+    // ── 固件 ATTITUDE (Mahony) 解算的 ENU 姿态 ───────────────────
+    //   固件输出 NED, 此处转换为 ENU (REP-103) 后发布
+    float    att_q_[4] = {0.0f, 0.0f, 0.0f, 1.0f};   // [x, y, z, w], ENU
+    bool     att_valid_ = false;
+    uint64_t att_count_ = 0;
+    uint64_t odom_count_ = 0;
+
+    void ParseAttitude();   // MAVLink ATTITUDE  → ENU 姿态
+    void ParseOdometry();   // MAVLink ODOMETRY  → Odometry 话题
 
     // ── 配置 ──────────────────────────────────────────────────────
     ExtImuConfig config_;
@@ -151,7 +168,6 @@ class ExtImuBridge {
     uint64_t mav_frame_count_ = 0;
     uint64_t mav_crc_err_     = 0;
     uint64_t imu_count_       = 0;
-
     // 线程
     std::unique_ptr<std::thread> serial_thread_;
     std::unique_ptr<std::thread> publish_thread_;

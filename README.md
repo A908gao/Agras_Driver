@@ -203,3 +203,24 @@ ros2 launch fast_lio mapping.launch.py config_file:=agras_mid360.yaml
 ```
 
 > **启动后务必静止 3 秒**，让 FAST-LIO 完成 IMU 初始化和陀螺偏置估计。
+
+---
+
+## MID360 → QGC 点云推流（mid360_udp_bridge）
+
+将 MID360 点云经 UDP 推流到 QGroundControl（FCCU 分支）「分析 → MID360 Point Cloud」页面，实现类似 RViz 的实时点云显示。
+
+```bash
+# 与驱动一起启动（QGC 所在设备 IP 192.168.x.y，留空则广播）
+./start_agras.sh stream --gcs-ip=192.168.1.100
+
+# 或手动启动桥接节点（需要先启动驱动）
+ros2 launch mid360_udp_bridge mid360_udp_bridge.launch.py \
+    gcs_ip:=192.168.1.100 voxel_size:=0.2
+```
+
+- QGC 页面默认监听 **UDP 57120** 端口，打开页面即自动开始接收；
+- 桥接节点默认体素降采样 0.2m、限帧 10Hz、每帧最多 2 万点；
+- 注意：雷达网卡 IP 固定为 `192.168.1.20`，推流走的是地面站链路网卡，请确认网络路由可达。
+
+详见 `mid360_udp_bridge/README.md`。

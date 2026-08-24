@@ -9,6 +9,7 @@
  */
 
 #include "ext_imu_bridge.h"
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <fcntl.h>
@@ -29,9 +30,13 @@ ExtImuBridge::~ExtImuBridge() { Stop(); }
 bool ExtImuBridge::Start() {
     if (running_.load()) return true;
     imu_pub_ = node_->create_publisher<sensor_msgs::msg::Imu>(config_.imu_topic, 10);
+    if (config_.publish_odometry) {
+        odom_pub_ = node_->create_publisher<nav_msgs::msg::Odometry>(config_.odom_topic, 10);
+    }
     RCLCPP_INFO(node_->get_logger(),
-        "[ExtIMU] port=%s baud=%d topic=%s pub_rate=%.0f Hz",
-        config_.port.c_str(), config_.baudrate, config_.imu_topic.c_str(), config_.publish_rate);
+        "[ExtIMU] port=%s baud=%d topic=%s pub_rate=%.0f Hz orient=%d odom=%d odom_topic=%s",
+        config_.port.c_str(), config_.baudrate, config_.imu_topic.c_str(), config_.publish_rate,
+        (int)config_.publish_orientation, (int)config_.publish_odometry, config_.odom_topic.c_str());
     running_.store(true);
     serial_thread_ = std::make_unique<std::thread>(&ExtImuBridge::SerialThread, this);
     publish_thread_ = std::make_unique<std::thread>(&ExtImuBridge::PublishThread, this);
@@ -58,6 +63,8 @@ ExtImuBridge::Stats ExtImuBridge::GetStats() const {
     s.imu_count   = imu_count_;
     s.imu_dropped = imu_dropped_;
     s.latest_temp = latest_temp_;
+    s.attitude_count = att_count_;
+    s.odometry_count = odom_count_;
     std::lock_guard<std::mutex> lock(data_mutex_);
     std::memcpy(s.latest_gyro, latest_gyro_, sizeof(s.latest_gyro));
     std::memcpy(s.latest_accel, latest_accel_, sizeof(s.latest_accel));
@@ -97,6 +104,118 @@ static rclcpp::Time mcu_to_ros_time(
     return rclcpp::Time(static_cast<uint64_t>(
         std::chrono::duration_cast<std::chrono::nanoseconds>(
             system_tp.time_since_epoch()).count()));
+}
+
+// ── 姿态换算 (固件 NED → ROS ENU, REP-103) ───────────────────────
+// q_ned2enu: 绕 (1,1,0)/√2 旋转 π, [w,x,y,z] = (0, √2/2, √2/2, 0)
+static const float Q_NED2ENU[4] = {0.0f, 0.70710678f, 0.70710678f, 0.0f};
+
+/** 321 欧拉角 (rad, NED) → 四元数 [w,x,y,z] */
+static void euler321_to_quat_wxyz(float roll, float pitch, float yaw, float q[4])
+{
+    float cr = cosf(0.5f * roll),  sr = sinf(0.5f * roll);
+    float cp = cosf(0.5f * pitch), sp = sinf(0.5f * pitch);
+    float cy = cosf(0.5f * yaw),   sy = sinf(0.5f * yaw);
+    q[0] = cr * cp * cy + sr * sp * sy;   /* w */
+    q[1] = sr * cp * cy - cr * sp * sy;   /* x */
+    q[2] = cr * sp * cy + sr * cp * sy;   /* y */
+    q[3] = cr * cp * sy - sr * sp * cy;   /* z */
+}
+
+/** Hamilton 乘法 q ⊗ r, 均为 [w,x,y,z] */
+static void quat_mult_wxyz(const float q[4], const float r[4], float out[4])
+{
+    out[0] = q[0] * r[0] - q[1] * r[1] - q[2] * r[2] - q[3] * r[3];
+    out[1] = q[0] * r[1] + q[1] * r[0] + q[2] * r[3] - q[3] * r[2];
+    out[2] = q[0] * r[2] - q[1] * r[3] + q[2] * r[0] + q[3] * r[1];
+    out[3] = q[0] * r[3] + q[1] * r[2] - q[2] * r[1] + q[3] * r[0];
+}
+
+// ── 固件 ATTITUDE (msgid 30, Mahony, NED) → ENU 姿态 ─────────────
+// 实测标定: 固件 NED roll 与飞控方向相反, pitch/yaw 按 NED→ENU 映射:
+//   roll_enu  = -roll_ned    (实测反号)
+//   pitch_enu = -pitch_ned
+//   yaw_enu   = -yaw_ned     (ENU 逆时针为正)
+void ExtImuBridge::ParseAttitude()
+{
+    mavlink_attitude_t att;
+    mavlink_msg_attitude_decode(&mav_msg_, &att);
+
+    float roll_enu  = -att.roll;
+    float pitch_enu = -att.pitch;
+    float yaw_enu   = -att.yaw;
+
+    float q_enu_wxyz[4];
+    euler321_to_quat_wxyz(roll_enu, pitch_enu, yaw_enu, q_enu_wxyz);
+
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    att_q_[0] = q_enu_wxyz[1];   /* x */
+    att_q_[1] = q_enu_wxyz[2];   /* y */
+    att_q_[2] = q_enu_wxyz[3];   /* z */
+    att_q_[3] = q_enu_wxyz[0];   /* w */
+    att_valid_ = true;
+    att_count_++;
+}
+
+// ── 固件 ODOMETRY (msgid 331) → nav_msgs/Odometry (ENU) ──────────
+void ExtImuBridge::ParseOdometry()
+{
+    std::string frame_id;
+    {
+        std::lock_guard<std::mutex> lock(config_mutex_);
+        if (!config_.publish_odometry || !odom_pub_) { return; }
+        frame_id = config_.frame_id;
+    }
+
+    mavlink_odometry_t od;
+    mavlink_msg_odometry_decode(&mav_msg_, &od);
+
+    auto msg = std::make_unique<nav_msgs::msg::Odometry>();
+    msg->header.stamp = node_->now();
+    msg->header.frame_id = "odom";
+    msg->child_frame_id = frame_id;
+
+    /* 位置 NED → ENU: (x, -y, -z) */
+    msg->pose.pose.position.x = od.x;
+    msg->pose.pose.position.y = -od.y;
+    msg->pose.pose.position.z = -od.z;
+
+    /* 姿态 q_ned → q_enu */
+    float q_ned[4] = {od.q[0], od.q[1], od.q[2], od.q[3]};  /* [w,x,y,z] */
+    float q_enu[4];
+    quat_mult_wxyz(Q_NED2ENU, q_ned, q_enu);
+    msg->pose.pose.orientation.x = q_enu[1];
+    msg->pose.pose.orientation.y = q_enu[2];
+    msg->pose.pose.orientation.z = q_enu[3];
+    msg->pose.pose.orientation.w = q_enu[0];
+
+    /* 线速度 NED → ENU */
+    msg->twist.twist.linear.x = od.vx;
+    msg->twist.twist.linear.y = -od.vy;
+    msg->twist.twist.linear.z = -od.vz;
+
+    /* 角速度: 机体系 NED 轴 → ENU 轴 (wy, wx, -wz) */
+    msg->twist.twist.angular.x = od.pitchspeed;
+    msg->twist.twist.angular.y = od.rollspeed;
+    msg->twist.twist.angular.z = -od.yawspeed;
+
+    /* 协方差: 21 上三角 (行主序) → 36 对称全阵 (double, REP-103) */
+    const float* src_cov[2] = {od.pose_covariance, od.velocity_covariance};
+    double* dst_cov[2] = {msg->pose.covariance.data(), msg->twist.covariance.data()};
+    for (int k = 0; k < 2; ++k) {
+        std::fill(dst_cov[k], dst_cov[k] + 36, 0.0);
+        int idx = 0;
+        for (int r = 0; r < 6; ++r) {
+            for (int c = r; c < 6; ++c) {
+                dst_cov[k][r * 6 + c] = src_cov[k][idx];
+                dst_cov[k][c * 6 + r] = src_cov[k][idx];
+                ++idx;
+            }
+        }
+    }
+
+    odom_pub_->publish(std::move(msg));
+    odom_count_++;
 }
 
 // ── SerialThread: 读串口 → MAVLink解析 → 推入队列 ─────────────────
@@ -170,6 +289,10 @@ void ExtImuBridge::SerialThread() {
                                 });
                             }
                             imu_count_++;
+                        } else if (mav_msg_.msgid == MAVLINK_MSG_ID_ATTITUDE) {
+                            ParseAttitude();
+                        } else if (mav_msg_.msgid == MAVLINK_MSG_ID_ODOMETRY) {
+                            ParseOdometry();
                         } else {
                             static int diag_cnt = 0;
                             if (diag_cnt < 5) {
@@ -225,6 +348,27 @@ void ExtImuBridge::PublishThread() {
             msg->orientation_covariance[0] = -1.0;
             msg->angular_velocity_covariance[0] = -1.0;
             msg->linear_acceleration_covariance[0] = -1.0;
+
+            /* 姿态: 固件 ATTITUDE (Mahony) → ENU; 无有效姿态时保持 -1 */
+            {
+                bool publish_orient = false;
+                {
+                    std::lock_guard<std::mutex> lock(config_mutex_);
+                    publish_orient = config_.publish_orientation;
+                }
+                if (publish_orient) {
+                    std::lock_guard<std::mutex> lock(data_mutex_);
+                    if (att_valid_) {
+                        msg->orientation.x = att_q_[0];
+                        msg->orientation.y = att_q_[1];
+                        msg->orientation.z = att_q_[2];
+                        msg->orientation.w = att_q_[3];
+                        for (int i = 0; i < 9; ++i) {
+                            msg->orientation_covariance[i] = (i % 4 == 0) ? 0.01f : 0.0f;
+                        }
+                    }
+                }
+            }
 
             float gx = sample.gx, gy = sample.gy, gz = sample.gz;
             float ax = sample.ax, ay = sample.ay, az = sample.az;

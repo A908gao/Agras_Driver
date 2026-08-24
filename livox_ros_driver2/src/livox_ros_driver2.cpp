@@ -148,6 +148,9 @@ DriverNode::DriverNode(const rclcpp::NodeOptions & node_options)
   this->declare_parameter("ext_imu_topic", "/livox/imu");
   this->declare_parameter("ext_imu_frame_id", "livox_frame");
   this->declare_parameter("ext_imu_publish_rate", 200.0);
+  this->declare_parameter("ext_imu_publish_orientation", true);  // 解析固件 ATTITUDE → ENU 姿态
+  this->declare_parameter("ext_imu_publish_odometry", true);     // 解析固件 ODOMETRY → /livox/odom
+  this->declare_parameter("ext_imu_odom_topic", "/livox/odom");
 
   this->get_parameter("xfer_format", xfer_format);
   this->get_parameter("multi_topic", multi_topic);
@@ -221,7 +224,7 @@ void DriverNode::InitExtImuBridge()
   ExtImuConfig cfg;
   cfg.enabled = true;
 
-  std::string port_str, topic_str, frame_str;
+  std::string port_str, topic_str, frame_str, odom_topic_str;
   int gyro_unit_int = 0, accel_unit_int = 0;
 
   this->get_parameter("ext_imu_port", port_str);
@@ -231,15 +234,21 @@ void DriverNode::InitExtImuBridge()
   this->get_parameter("ext_imu_topic", topic_str);
   this->get_parameter("ext_imu_frame_id", frame_str);
   this->get_parameter("ext_imu_publish_rate", cfg.publish_rate);
+  this->get_parameter("ext_imu_publish_orientation", cfg.publish_orientation);
+  this->get_parameter("ext_imu_publish_odometry", cfg.publish_odometry);
+  this->get_parameter("ext_imu_odom_topic", odom_topic_str);
 
   cfg.port       = port_str;
   cfg.imu_topic  = topic_str;
   cfg.frame_id   = frame_str;
+  cfg.odom_topic = odom_topic_str;
   cfg.gyro_unit  = (gyro_unit_int == 1) ? GyroUnit::DEG_PER_S : GyroUnit::RAD_PER_S;
   cfg.accel_unit = (accel_unit_int == 1) ? AccelUnit::G : AccelUnit::M_PER_S2;
 
   RCLCPP_INFO(this->get_logger(),
-    "[ExtIMU] External IMU bridge ENABLED — publishing to %s", cfg.imu_topic.c_str());
+    "[ExtIMU] External IMU bridge ENABLED — publishing to %s (orientation=%d, odom=%d → %s)",
+    cfg.imu_topic.c_str(), (int)cfg.publish_orientation, (int)cfg.publish_odometry,
+    cfg.odom_topic.c_str());
 
   ext_imu_bridge_ = std::make_unique<ExtImuBridge>(this, cfg);
   ext_imu_bridge_->Start();
