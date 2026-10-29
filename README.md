@@ -1,6 +1,5 @@
 # Agras MID360 Driver
 
-基于 Livox MID360 激光雷达 + ADIS16500 外部 IMU 的高精度 SLAM 方案。
 
 **系统架构**: `L431_ADI (MCU固件)` → ttyIMU → `ext_imu_bridge (本驱动)` → `/livox/imu` → `FAST-LIO`
 
@@ -19,21 +18,12 @@ Agras 雷达的 IP 和端口由固件固定，**不可修改**：
 | 主机 IP | **192.168.1.20**（必须设置为此 IP） |
 | 点云端口 | **60001** |
 | IMU 端口 | **60003** |
-| 命令端口 | **60000** |
+
 
 > 使用前请将主机网卡 IP 设置为 `192.168.1.20`，子网掩码 `255.255.255.0`。
 
-### 帧率提升导致点云视觉差异
-Agras 固件将扫描帧率从标准 MID360 的 **21.9Hz 提升至 ~33Hz**。这带来：
-
-- ✅ 每秒有效点数从 5.4 万提升至 **11.7 万**（2.2 倍）
-- ⚠️ 单帧扫描时间从 45ms 缩短至 30ms，**单帧内点云看起来更稀疏**
-- ⚠️ 更高帧率意味着 RViz 中旧点被更快替换，视觉上"闪烁"感更强
-
-> 这是正常现象，不影响 SLAM 精度。如需视觉上更稠密，可降低 RViz 的 Decay Time 或降低驱动 `publish_freq`。
-
 ### FOV 缩减
-Agras 固件屏蔽了右后方约 **60°** 扇区（方位角 [-180°, -130°] 及 [170°, 180°]），实际 FOV 约 **300°**。这是农业无人机机身遮挡区域的正常设计。
+Agras 固件屏蔽了右后方约 **60°** 扇区（方位角 [-180°, -130°] 及 [170°, 180°]），实际 FOV 约 **300°**。
 
 ### 200m Sentinel 点
 Agras 固件在无激光回波时生成距离恰好 **200m**、反射率为 **0** 的占位点（标准 MID360 使用全零坐标）。驱动已设置 `>50m` 过滤丢弃这些点。
@@ -41,7 +31,6 @@ Agras 固件在无激光回波时生成距离恰好 **200m**、反射率为 **0*
 ### 适用场景
 本驱动仅适配 **Agras MID360（定制固件）** 和 **标准 MID360**。其他 Livox 型号（HAP、MID360s 等）已移除支持，如需使用请自行甄别和适配。
 
----
 
 ## 模块改动汇总
 
@@ -56,11 +45,10 @@ Agras 固件在无激光回波时生成距离恰好 **200m**、反射率为 **0*
 | `src/comm/pub_handler.cpp` | 移除 `[DEBUG ROS]` / `[FILTER]` 等调试输出 |
 | `src/comm/comm.h` | 移除 `kLineNumberHAP`，精简为 MID360 专用 |
 
-#### IMU 数据修复（关键）
+#### IMU 数据修复
 | 文件 | 改动 |
 |------|------|
 | `src/lddc.cpp` | **加速度 G → m/s² 转换（×9.8）**，修复 FAST-LIO 重力补偿错误导致的定位漂移 |
-| `src/lddc.cpp` | 移除 `[DEBUG ROS] Distribute skip` 调试输出 |
 
 #### 配置与启动文件
 | 文件 | 说明 |
@@ -73,11 +61,6 @@ Agras 固件在无激光回波时生成距离恰好 **200m**、反射率为 **0*
 | `launch_ROS2/msg_AGRAS_MID360_launch.py` | **新增** Agras 驱动启动（无 RViz） |
 | `launch_ROS2/rviz_AGRAS_MID360_launch.py` | **新增** Agras 驱动启动 + RViz2 + 静态 TF |
 
-#### 清理删除
-- `config/HAP_config.json`, `MID360s_config.json`, `mixed_HAP_MID360_config.json`
-- `launch_ROS2/msg_HAP_launch.py`, `msg_MID360s_launch.py`
-- `launch_ROS2/rviz_HAP_launch.py`, `rviz_MID360s_launch.py`, `rviz_mixed.py`
-- `config/agras_mid360_params.yaml`
 
 #### Agras vs MID360 差异
 | 参数 | MID360 | Agras |
